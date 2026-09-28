@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User account information, role and approval status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "user"] },
+        "status": { "type": "string", "enum": ["approved", "pending", "rejected"] },
+        "canViewRawCode": { "type": "boolean" },
+        "permissions": { "type": "object" },
+        "wardSetupCount": { "type": "number" },
+        "provinceCode": { "type": "string" },
+        "provinceName": { "type": "string" },
+        "wardCode": { "type": "string" },
+        "wardName": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "locationUpdatedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "requestedAt": { "type": "string", "format": "date-time" },
+        "approvedAt": { "type": "string", "format": "date-time" },
+        "approvedBy": { "type": "string" }
+      },
+      "required": ["uid", "email", "role", "status"]
+    },
+    "AppConfiguration": {
+      "title": "App Configuration",
+      "description": "Presets and customized configurations for Reception and KSK Examination",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "receptionConfig": { "type": "object" },
+        "kskConfig": { "type": "object" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "receptionConfig", "kskConfig"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "entity": "UserProfile",
+      "description": "Registered users with authorization status and roles"
+    },
+    "configurations/{configId}": {
+      "entity": "AppConfiguration",
+      "description": "Shared and admin presets for clinical and admission workflows"
+    }
+  }
+}
