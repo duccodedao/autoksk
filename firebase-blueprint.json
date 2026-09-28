@@ -21,6 +21,14 @@
         "latitude": { "type": "number" },
         "longitude": { "type": "number" },
         "locationUpdatedAt": { "type": "string", "format": "date-time" },
+        "ipWifi": { "type": "string" },
+        "networkAddress": { "type": "string" },
+        "deviceIp": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "failedLoginAttempts": { "type": "number" },
+        "deviceLocked": { "type": "boolean" },
+        "deviceLockedAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "requestedAt": { "type": "string", "format": "date-time" },
@@ -45,6 +53,20 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "name", "receptionConfig", "kskConfig"]
+    },
+    "AdminTotpConfig": {
+      "title": "Admin 2FA Authenticator Config",
+      "description": "TOTP 2FA secret and settings for quick Super Admin OTP login",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "secret": { "type": "string" },
+        "issuer": { "type": "string" },
+        "accountName": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["enabled", "secret"]
     }
   },
   "firestore": {
@@ -55,6 +77,10 @@
     "configurations/{configId}": {
       "entity": "AppConfiguration",
       "description": "Shared and admin presets for clinical and admission workflows"
+    },
+    "settings/{settingId}": {
+      "entity": "AdminTotpConfig",
+      "description": "System security and 2FA Authenticator configuration"
     }
   }
 }

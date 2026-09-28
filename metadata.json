@@ -1,6 +1,6 @@
 {
-  "name": "HIS Automation Suite | Tiếp Nhận & Khám Sức Khỏe Tự Động",
-  "description": "Bộ công cụ tự động hóa toàn diện dành cho hệ thống HIS: Tiếp nhận bệnh nhân hàng loạt từ Excel và Tự động điền phiếu Khám Sức Khỏe (KSK) chuẩn Thông tư 32/2023/TT-BYT trên nền giao diện sáng.",
+  "name": "Auto Khám sức khỏe",
+  "description": "Đọc cái đéo gì",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

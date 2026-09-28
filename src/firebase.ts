@@ -124,6 +124,14 @@ export interface UserProfile {
   latitude?: number;
   longitude?: number;
   locationUpdatedAt?: string;
+  ipWifi?: string;
+  networkAddress?: string;
+  deviceIp?: string;
+  deviceId?: string;
+  failedLoginAttempts?: number;
+  deviceLocked?: boolean;
+  deviceLockedAt?: string;
+  lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
   requestedAt?: string;

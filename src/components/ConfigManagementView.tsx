@@ -36,6 +36,8 @@ import {
   KskConfigData,
   KskChildConfigData,
 } from '../firebase';
+import { AdminTotpConfig } from '../utils/totp';
+import { AdminTotpSetupCard } from './AdminTotpSetupCard';
 
 interface ConfigManagementViewProps {
   configs: AppConfiguration[];
@@ -44,6 +46,10 @@ interface ConfigManagementViewProps {
   onSaveConfig: (config: AppConfiguration) => Promise<void>;
   onDeleteConfig: (configId: string) => Promise<void>;
   onSetDefaultConfig: (configId: string) => Promise<void>;
+  isSuperAdmin?: boolean;
+  totpConfig: AdminTotpConfig;
+  onSaveTotpConfig: (newTotpConfig: AdminTotpConfig) => Promise<void>;
+  showToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => void;
   isLoading: boolean;
 }
 
@@ -54,6 +60,10 @@ export const ConfigManagementView: React.FC<ConfigManagementViewProps> = ({
   onSaveConfig,
   onDeleteConfig,
   onSetDefaultConfig,
+  isSuperAdmin = false,
+  totpConfig,
+  onSaveTotpConfig,
+  showToast,
   isLoading,
 }) => {
   const [editingConfig, setEditingConfig] = useState<AppConfiguration | null>(null);
@@ -148,6 +158,15 @@ export const ConfigManagementView: React.FC<ConfigManagementViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Admin 2FA Authenticator Setup Card (Only visible to Super Admin, hidden from guests/users) */}
+      {isSuperAdmin && (
+        <AdminTotpSetupCard
+          totpConfig={totpConfig}
+          onSaveTotpConfig={onSaveTotpConfig}
+          showToast={showToast}
+        />
+      )}
 
       {/* Configuration Editor Modal/Card */}
       {editingConfig && (

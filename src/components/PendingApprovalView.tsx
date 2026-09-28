@@ -84,12 +84,30 @@ export const PendingApprovalView: React.FC<PendingApprovalViewProps> = ({
             </div>
 
             <div className="pt-2 border-t border-slate-200/60 text-[11px] text-slate-500 space-y-1">
-              <div>
-                <span className="font-medium text-slate-700">Thời gian đăng ký:</span>{' '}
-                {new Date(userProfile.createdAt).toLocaleString('vi-VN')}
+              {userProfile.ipWifi && (
+                <div className="flex items-center justify-between font-mono">
+                  <span className="font-sans font-medium text-slate-700">IP Wifi:</span>
+                  <span className="text-slate-900 font-bold">{userProfile.ipWifi}</span>
+                </div>
+              )}
+              {userProfile.deviceIp && (
+                <div className="flex items-center justify-between font-mono">
+                  <span className="font-sans font-medium text-slate-700">IP Thiết bị:</span>
+                  <span className="text-slate-900 font-bold truncate max-w-[220px]">{userProfile.deviceIp}</span>
+                </div>
+              )}
+              {userProfile.networkAddress && (
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-slate-700">Address:</span>
+                  <span className="text-slate-900 font-semibold truncate max-w-[220px]">{userProfile.networkAddress}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-700">Thời gian đăng ký:</span>
+                <span>{new Date(userProfile.createdAt).toLocaleString('vi-VN')}</span>
               </div>
-              <div>
-                <span className="font-medium text-slate-700">Admin phụ trách duyệt:</span>{' '}
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-700">Admin phụ trách duyệt:</span>
                 <span className="font-mono text-blue-700 font-semibold">{ADMIN_EMAIL}</span>
               </div>
             </div>

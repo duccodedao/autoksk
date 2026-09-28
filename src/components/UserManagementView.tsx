@@ -19,6 +19,9 @@ import {
   X,
   Check,
   Eye,
+  Wifi,
+  Cpu,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   UserProfile,
@@ -29,6 +32,7 @@ import {
   FULL_USER_PERMISSIONS,
   DEFAULT_USER_PERMISSIONS,
 } from '../firebase';
+import { LockedDeviceRecord } from '../utils/deviceSecurity';
 
 interface UserManagementViewProps {
   users: UserProfile[];
@@ -38,6 +42,9 @@ interface UserManagementViewProps {
   onChangeRole: (userId: string, newRole: UserRole) => Promise<void>;
   onToggleRawCodePermission: (user: UserProfile) => Promise<void>;
   onUpdateUserPermissions: (userId: string, permissions: UserPermissions) => Promise<void>;
+  onToggleUserDeviceLock?: (user: UserProfile) => Promise<void>;
+  lockedDevices?: LockedDeviceRecord[];
+  onUnlockBannedDevice?: (deviceId: string) => Promise<void>;
   onRefreshUsers: () => Promise<void>;
   isLoading: boolean;
 }
@@ -49,6 +56,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   onRejectUser,
   onChangeRole,
   onUpdateUserPermissions,
+  onToggleUserDeviceLock,
+  lockedDevices = [],
+  onUnlockBannedDevice,
   onRefreshUsers,
   isLoading,
 }) => {
@@ -62,9 +72,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [savingPerms, setSavingPerms] = useState(false);
 
   const filteredUsers = users.filter((u) => {
+    const q = searchTerm.toLowerCase();
     const matchesSearch =
-      (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (u.displayName || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.displayName || '').toLowerCase().includes(q) ||
+      (u.ipWifi || '').toLowerCase().includes(q) ||
+      (u.deviceIp || '').toLowerCase().includes(q) ||
+      (u.networkAddress || '').toLowerCase().includes(q);
     const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -165,6 +179,32 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* User Network & Device Security Readout Bar */}
+            <div className="px-5 py-2.5 bg-slate-900 text-slate-200 border-b border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+              <div className="flex items-center gap-1.5">
+                <Wifi className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                <span className="text-slate-400">IP Wifi:</span>
+                <strong className="text-white truncate">{editingPermUser.ipWifi || 'Chưa ghi nhận'}</strong>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="text-slate-400">IP Thiết bị:</span>
+                <strong className="text-white truncate">
+                  {editingPermUser.deviceIp || editingPermUser.deviceId || 'Chưa ghi nhận'}
+                </strong>
+              </div>
+              <div className="flex items-center gap-1.5 font-sans">
+                <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-slate-400 font-mono">Address:</span>
+                <strong className="text-white truncate">
+                  {editingPermUser.networkAddress ||
+                    (editingPermUser.wardName
+                      ? `${editingPermUser.wardName}, ${editingPermUser.provinceName}`
+                      : 'Chưa đồng bộ')}
+                </strong>
+              </div>
             </div>
 
             {/* Quick Presets Bar */}
@@ -516,7 +556,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm font-bold text-slate-900">
                   Hệ Thống Phân Quyền Chi Tiết & Duyệt Người Dùng
                 </h2>
@@ -525,9 +565,14 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                     {pendingCount} chờ duyệt
                   </span>
                 )}
+                {lockedDevices.filter((d) => d.locked).length > 0 && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-600 text-white">
+                    {lockedDevices.filter((d) => d.locked).length} thiết bị bị cấm
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-500">
-                Phân quyền: Truy cập Tab · Nhập/Xuất Excel · 4 Tab Tiếp nhận · Đổi Xã/Phường (khóa sau 1 lần) · API KSK & Mã hóa/Mã gốc cũ
+                Giám sát IP Wifi · Address · IP Thiết bị · Tự động khóa thiết bị nếu nhập sai quá 5 lần · Phân quyền chi tiết
               </p>
             </div>
           </div>
@@ -594,14 +639,93 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         </div>
       </div>
 
+      {/* Locked & Banned Devices Security Panel (When devices exceed 5 failed attempts or locked by Admin) */}
+      {lockedDevices.filter((d) => d.locked || d.failedAttempts > 0).length > 0 && (
+        <div className="bg-white border border-rose-200 rounded-2xl p-4 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between border-b border-rose-100 pb-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                  Giám Sát Bảo Mật Thiết Bị & Cảnh Báo Nhập Sai (Tự động khóa khi sai quá 5 lần)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Danh sách các thiết bị đang bị khóa cấm truy cập hoặc có lịch sử nhập sai mã xác thực.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-rose-200/80">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-rose-50/70 border-b border-rose-200/80 text-rose-950 font-bold text-[11px]">
+                  <th className="py-2 px-3">IP Thiết Bị (Device ID)</th>
+                  <th className="py-2 px-3">IP Wifi</th>
+                  <th className="py-2 px-3">Address (Vị trí mạng / ISP)</th>
+                  <th className="py-2 px-3">Số lần sai</th>
+                  <th className="py-2 px-3">Trạng thái</th>
+                  <th className="py-2 px-3 text-right">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rose-100">
+                {lockedDevices
+                  .filter((d) => d.locked || d.failedAttempts > 0)
+                  .map((dev) => (
+                    <tr key={dev.deviceId} className="hover:bg-rose-50/30">
+                      <td className="py-2 px-3 font-mono font-bold text-slate-900">
+                        {dev.deviceIp || dev.deviceId}
+                      </td>
+                      <td className="py-2 px-3 font-mono text-blue-700 font-bold">
+                        {dev.ipWifi || 'N/A'}
+                      </td>
+                      <td className="py-2 px-3 text-slate-700">
+                        {dev.networkAddress || 'N/A'}
+                      </td>
+                      <td className="py-2 px-3 font-mono font-bold text-rose-700">
+                        {dev.failedAttempts} / 5 lần
+                      </td>
+                      <td className="py-2 px-3">
+                        {dev.locked ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">
+                            <Lock className="w-2.5 h-2.5" /> ĐÃ KHÓA & CẤM TRUY CẬP
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Cảnh báo ({dev.failedAttempts}/5)
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        {onUnlockBannedDevice && (
+                          <button
+                            type="button"
+                            onClick={() => onUnlockBannedDevice(dev.deviceId)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Unlock className="w-3 h-3" />
+                            <span>Mở khóa & Reset</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-80">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Tìm email hoặc tên..."
+              placeholder="Tìm email, tên, IP Wifi, IP Thiết bị, Address..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
@@ -618,9 +742,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <thead>
               <tr className="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
                 <th className="py-2.5 px-3">Người dùng</th>
+                <th className="py-2.5 px-3">IP Wifi / Address / IP Thiết Bị</th>
                 <th className="py-2.5 px-3">Xã/Phường & Khóa Đổi</th>
                 <th className="py-2.5 px-3">Vai trò</th>
-                <th className="py-2.5 px-3">Trạng thái</th>
+                <th className="py-2.5 px-3">Trạng thái & Thiết bị</th>
                 <th className="py-2.5 px-3">Tóm tắt Phân Quyền</th>
                 <th className="py-2.5 px-3 text-center">Cấu hình Quyền</th>
                 <th className="py-2.5 px-3 text-right">Duyệt / Khóa</th>
@@ -629,7 +754,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
                     Không tìm thấy tài khoản nào phù hợp.
                   </td>
                 </tr>
@@ -641,6 +766,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   const effectiveRole: UserRole = isRootOwner ? 'super_admin' : u.role;
                   const uPerms = getEffectivePermissions(u);
                   const hasSetupWardOnce = Boolean(u.wardCode && u.provinceCode);
+                  const userFailedCount = u.failedLoginAttempts || 0;
+                  const isUserDeviceLocked = Boolean(u.deviceLocked || userFailedCount >= 5);
 
                   const receptionTabsCount = [
                     uPerms.receptionTab1_Obfuscated,
@@ -650,7 +777,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   ].filter(Boolean).length;
 
                   return (
-                    <tr key={u.uid} className="hover:bg-slate-50/70 transition-colors">
+                    <tr
+                      key={u.uid}
+                      className={`transition-colors ${
+                        isUserDeviceLocked ? 'bg-rose-50/40 hover:bg-rose-50/70' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
                       {/* User Info */}
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-2">
@@ -673,6 +805,29 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                             <div className="font-mono text-[10px] text-slate-500 truncate">
                               {u.email}
                             </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* IP Wifi / Address / IP Thiết Bị */}
+                      <td className="py-2.5 px-3">
+                        <div className="space-y-1 text-[11px]">
+                          <div className="flex items-center gap-1.5 font-mono">
+                            <Wifi className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="text-slate-500">IP Wifi:</span>
+                            <strong className="text-slate-900">{u.ipWifi || 'Chưa ghi nhận'}</strong>
+                          </div>
+                          <div className="flex items-center gap-1.5 font-mono">
+                            <Cpu className="w-3 h-3 text-indigo-600 shrink-0" />
+                            <span className="text-slate-500">IP Thiết bị:</span>
+                            <strong className="text-slate-800">{u.deviceIp || u.deviceId || 'Chưa ghi nhận'}</strong>
+                          </div>
+                          <div className="flex items-start gap-1.5">
+                            <MapPin className="w-3 h-3 text-emerald-600 shrink-0 mt-0.5" />
+                            <span className="text-slate-500 font-mono shrink-0">Address:</span>
+                            <span className="text-slate-700 font-medium line-clamp-1">
+                              {u.networkAddress || (u.wardName ? `${u.wardName}, ${u.provinceName}` : 'Chưa đồng bộ')}
+                            </span>
                           </div>
                         </div>
                       </td>
@@ -743,23 +898,39 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         )}
                       </td>
 
-                      {/* Status */}
+                      {/* Status & Device Security */}
                       <td className="py-2.5 px-3">
-                        {u.status === 'approved' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Đã duyệt
-                          </span>
-                        )}
-                        {u.status === 'pending' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700">
-                            <Clock className="w-3.5 h-3.5" /> Chờ duyệt
-                          </span>
-                        )}
-                        {u.status === 'rejected' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700">
-                            <XCircle className="w-3.5 h-3.5" /> Đã khóa
-                          </span>
-                        )}
+                        <div className="space-y-1">
+                          <div>
+                            {u.status === 'approved' && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Đã duyệt
+                              </span>
+                            )}
+                            {u.status === 'pending' && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700">
+                                <Clock className="w-3.5 h-3.5" /> Chờ duyệt
+                              </span>
+                            )}
+                            {u.status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700">
+                                <XCircle className="w-3.5 h-3.5" /> Đã khóa TK
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] font-mono">
+                            {isUserDeviceLocked ? (
+                              <span className="text-rose-600 font-bold">
+                                ● Khóa thiết bị ({userFailedCount}/5 lần sai)
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">
+                                Sai: {userFailedCount}/5 lần
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
 
                       {/* Permission Summary Badges */}
@@ -814,7 +985,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         {isRootOwner ? (
                           <span className="text-[10px] font-mono text-slate-400">Owner</span>
                         ) : (
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             {u.status !== 'approved' && (
                               <button
                                 onClick={() => handleApprove(u.uid)}
@@ -831,7 +1002,35 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                                 disabled={isActionLoading}
                                 className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-semibold transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1"
                               >
-                                <UserX className="w-3 h-3" /> {u.status === 'approved' ? 'Khóa' : 'Từ chối'}
+                                <UserX className="w-3 h-3" /> {u.status === 'approved' ? 'Khóa TK' : 'Từ chối'}
+                              </button>
+                            )}
+
+                            {onToggleUserDeviceLock && (
+                              <button
+                                type="button"
+                                onClick={() => onToggleUserDeviceLock(u)}
+                                disabled={isActionLoading}
+                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1 ${
+                                  isUserDeviceLocked
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                    : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border-slate-200 hover:border-rose-200'
+                                }`}
+                                title={
+                                  isUserDeviceLocked
+                                    ? 'Mở khóa thiết bị và reset số lần nhập sai về 0'
+                                    : 'Khóa thiết bị và cấm truy cập'
+                                }
+                              >
+                                {isUserDeviceLocked ? (
+                                  <>
+                                    <Unlock className="w-3 h-3" /> Mở Thiết Bị
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="w-3 h-3" /> Khóa Thiết Bị
+                                  </>
+                                )}
                               </button>
                             )}
                           </div>

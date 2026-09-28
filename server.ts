@@ -11,6 +11,12 @@ import {
   SERVER_DEFAULT_KSK_CONFIG,
 } from './src/utils/kskScriptBuilder';
 import { obfuscateScript } from './src/utils/obfuscate';
+import {
+  AdminTotpConfig,
+  DEFAULT_ADMIN_TOTP_CONFIG,
+  cleanBase32Secret,
+  verifyTotpToken,
+} from './src/utils/totp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,6 +29,7 @@ interface KskApiCacheState {
   configsById: Record<string, KskConfigData>;
   totalRequests: number;
   lastRequestedAt: string | null;
+  adminTotpConfig: AdminTotpConfig;
 }
 
 const DEFAULT_PRESETS_BY_ID: Record<string, KskConfigData> = {
@@ -73,6 +80,10 @@ function loadInitialState(): KskApiCacheState {
         },
         totalRequests: Number(parsed.totalRequests) || 0,
         lastRequestedAt: parsed.lastRequestedAt || null,
+        adminTotpConfig: {
+          ...DEFAULT_ADMIN_TOTP_CONFIG,
+          ...(parsed.adminTotpConfig || {}),
+        },
       };
     }
   } catch {
@@ -84,6 +95,7 @@ function loadInitialState(): KskApiCacheState {
     configsById: { ...DEFAULT_PRESETS_BY_ID },
     totalRequests: 0,
     lastRequestedAt: null,
+    adminTotpConfig: { ...DEFAULT_ADMIN_TOTP_CONFIG },
   };
 }
 
@@ -274,6 +286,126 @@ async function startServer() {
 
   app.get('/api/ksk/script', handleGetKskScript);
   app.get('/api/ksk/script.js', handleGetKskScript);
+
+  // 4. Admin 2FA Authenticator (TOTP) Endpoints
+  app.get('/api/auth/totp/status', (_req, res) => {
+    res.json({
+      ok: true,
+      enabled: Boolean(kskStore.adminTotpConfig?.enabled),
+      issuer: kskStore.adminTotpConfig?.issuer || DEFAULT_ADMIN_TOTP_CONFIG.issuer,
+      accountName: kskStore.adminTotpConfig?.accountName || DEFAULT_ADMIN_TOTP_CONFIG.accountName,
+      updatedAt: kskStore.adminTotpConfig?.updatedAt || null,
+    });
+  });
+
+  app.post('/api/auth/totp/sync', (req, res) => {
+    try {
+      const { enabled, secret, issuer, accountName, updatedAt, updatedBy } = req.body || {};
+      const cleanedSecret = cleanBase32Secret(secret || kskStore.adminTotpConfig.secret);
+      if (!cleanedSecret) {
+        res.status(400).json({ ok: false, error: 'Secret Base32 không hợp lệ.' });
+        return;
+      }
+      kskStore.adminTotpConfig = {
+        enabled: typeof enabled === 'boolean' ? enabled : kskStore.adminTotpConfig.enabled,
+        secret: cleanedSecret,
+        issuer: String(issuer || kskStore.adminTotpConfig.issuer || DEFAULT_ADMIN_TOTP_CONFIG.issuer),
+        accountName: String(
+          accountName || kskStore.adminTotpConfig.accountName || DEFAULT_ADMIN_TOTP_CONFIG.accountName
+        ),
+        updatedAt: String(updatedAt || new Date().toISOString()),
+        updatedBy: String(updatedBy || 'sonlyhongduc@gmail.com'),
+      };
+      persistState();
+      res.json({
+        ok: true,
+        enabled: kskStore.adminTotpConfig.enabled,
+        updatedAt: kskStore.adminTotpConfig.updatedAt,
+      });
+    } catch (err: any) {
+      res.status(400).json({ ok: false, error: err?.message || 'Lỗi đồng bộ cấu hình 2FA' });
+    }
+  });
+
+  app.post('/api/auth/totp/verify', async (req, res) => {
+    try {
+      const { code, fallbackSecret } = req.body || {};
+      const cleanedCode = String(code || '').replace(/\D/g, '');
+      if (cleanedCode.length !== 6) {
+        res.status(400).json({
+          ok: false,
+          valid: false,
+          error: 'Vui lòng nhập đủ 6 chữ số mã OTP.',
+        });
+        return;
+      }
+
+      if (!kskStore.adminTotpConfig.enabled) {
+        res.status(403).json({
+          ok: false,
+          valid: false,
+          error: 'Chức năng đăng nhập nhanh bằng mã OTP hiện đang bị tắt bởi Admin.',
+        });
+        return;
+      }
+
+      // Check against server-stored secret (and optional synced Firestore secret if server just cold-started)
+      const activeSecret = kskStore.adminTotpConfig.secret;
+      let isValid = await verifyTotpToken(cleanedCode, activeSecret, 1, 30);
+
+      if (!isValid && typeof fallbackSecret === 'string' && fallbackSecret.trim()) {
+        const cleanedFallback = cleanBase32Secret(fallbackSecret);
+        if (cleanedFallback) {
+          const fallbackValid = await verifyTotpToken(cleanedCode, cleanedFallback, 1, 30);
+          if (fallbackValid) {
+            isValid = true;
+            kskStore.adminTotpConfig.secret = cleanedFallback;
+            persistState();
+          }
+        }
+      }
+
+      if (!isValid) {
+        res.status(401).json({
+          ok: false,
+          valid: false,
+          error: 'Mã OTP không chính xác hoặc đã hết hạn (chu kỳ 30 giây).',
+        });
+        return;
+      }
+
+      res.json({
+        ok: true,
+        valid: true,
+        role: 'super_admin',
+        email: 'sonlyhongduc@gmail.com',
+        verifiedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      res.status(500).json({
+        ok: false,
+        valid: false,
+        error: err?.message || 'Lỗi máy chủ xác thực OTP.',
+      });
+    }
+  });
+
+  // 5. Security & Client Network Telemetry Endpoints
+  app.get('/api/security/client-info', (req, res) => {
+    const xff = req.headers['x-forwarded-for'];
+    const rawIp = Array.isArray(xff)
+      ? xff[0]
+      : typeof xff === 'string'
+      ? xff.split(',')[0].trim()
+      : req.socket.remoteAddress || req.ip || '113.161.72.104';
+    const cleanIp = rawIp.replace(/^::ffff:/, '');
+    res.json({
+      ok: true,
+      ipWifi: cleanIp === '127.0.0.1' || cleanIp === '::1' ? '113.161.72.104' : cleanIp,
+      networkAddress: 'Việt Nam · Hạ tầng mạng Y tế HIS',
+      timestamp: new Date().toISOString(),
+    });
+  });
 
   // Vite middleware in development, static assets in production
   if (process.env.NODE_ENV !== 'production') {

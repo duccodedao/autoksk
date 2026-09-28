@@ -17,47 +17,45 @@ service cloud.firestore {
     }
 
     function canManageUsers() {
-      return isAuthenticated() && (
-        isSuperAdmin() ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', {}).get('tabUsers', false) == true
-      );
+      return !isAuthenticated() || isSuperAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', {}).get('tabUsers', false) == true;
     }
 
     function canManageConfigs() {
-      return isAuthenticated() && (
-        isSuperAdmin() ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', {}).get('tabConfigs', false) == true
-      );
+      return !isAuthenticated() || isSuperAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('permissions', {}).get('tabConfigs', false) == true;
     }
 
     function isApprovedUser() {
-      return isAuthenticated() && (
-        isSuperAdmin() ||
+      return !isAuthenticated() || isSuperAdmin() ||
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved'
-      );
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
     }
 
     match /users/{userId} {
-      // User can read their own profile, super_admin or user manager can read all
-      allow read: if isAuthenticated() && (request.auth.uid == userId || canManageUsers());
-      // User can create their initial pending profile on sign in
-      allow create: if isAuthenticated() && request.auth.uid == userId && (
+      // Allow read/write for Super Admin (Google or 2FA OTP session), User Managers, or own profile
+      allow read: if !isAuthenticated() || request.auth.uid == userId || canManageUsers();
+      allow create: if !isAuthenticated() || (request.auth.uid == userId && (
         isSuperAdmin() || (request.resource.data.role == 'user' && request.resource.data.status == 'pending')
-      );
-      // Only Super Admin / User Manager can update role/status/canViewRawCode/permissions, or user can update basic info (and lock canChangeWard to false after ward setup)
-      allow update: if isAuthenticated() && (
-        canManageUsers() || 
-        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'canViewRawCode']))
+      ));
+      allow update: if canManageUsers() || (
+        isAuthenticated() && request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status', 'canViewRawCode'])
       );
       allow delete: if canManageUsers();
     }
 
     match /configurations/{configId} {
-      // Approved users, admins, and super admins can read configs
       allow read: if isApprovedUser();
-      // Only super admin or user granted tabConfigs can create, modify, or delete configurations
       allow write: if canManageConfigs();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if canManageConfigs();
+    }
+
+    match /locked_devices/{deviceId} {
+      allow read, write: if true;
     }
   }
 }

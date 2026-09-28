@@ -501,40 +501,7 @@ export const ReceptionTab: React.FC<ReceptionTabProps> = ({
   onOpenLocationSetup,
   showToast,
 }) => {
-  const [patients, setPatients] = useState<PatientRecord[]>([
-    {
-      id: 'p_1',
-      hoTen: 'SƠN LÝ HỒNG ĐỨC',
-      cccd: '095203006561',
-      ngaySinh: '15/08/1995',
-      status: 'valid',
-      statusMessage: 'Hợp lệ',
-    },
-    {
-      id: 'p_2',
-      hoTen: 'NGUYỄN VĂN AN',
-      cccd: '079201004812',
-      ngaySinh: '20/11/1992',
-      status: 'valid',
-      statusMessage: 'Hợp lệ',
-    },
-    {
-      id: 'p_3',
-      hoTen: 'TRẦN THỊ MAI',
-      cccd: '083199002134',
-      ngaySinh: '05/04/1999',
-      status: 'valid',
-      statusMessage: 'Hợp lệ',
-    },
-    {
-      id: 'p_4',
-      hoTen: 'LÊ HOÀNG NAM',
-      cccd: '091200007845',
-      ngaySinh: '12/09/2000',
-      status: 'valid',
-      statusMessage: 'Hợp lệ',
-    },
-  ]);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
 
   const hasCustomWardSetup = Boolean(currentUser?.wardName && currentUser?.provinceName);
   const perms = getEffectivePermissions(currentUser);
